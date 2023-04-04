@@ -1,0 +1,18 @@
+[package]
+name = "once_again"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+petgraph = {version = "0.6.3", features = ["serde-1"]}
+serde_json = "1.0.92"
+serde = { version = "1.0", features = ["derive"] }
+rand = "0.8.5"
+stats = "0.0.1"
+stats-cli = "3.0.1"
+queues = "1.1.0"
+help = "0.0.0"
+colors-transform = "0.2.11"
+csv = "1.2.1"
