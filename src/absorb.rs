@@ -33,11 +33,11 @@ struct TaskInstInfo {
 
 type DAG = Graph<TaskInfo, u64, Directed>;
 
-const BATCH_TASK_FILE: &str = "/home/ksenia/vsc/alibaba_dataset/dump_files/batch_task.csv";
+const BATCH_TASK_FILE: &str = "/home/ksenia/datasets/batch_task.csv";
 const MAX_GRAPHS: i32 = 100000;
 const BATCH_INSTANCE_FILENAME: &str =
-    "/home/ksenia/vsc/alibaba_dataset/dump_files/batch_instance_.csv";
-pub const INS_INPUT_FILENAME: &str = "../dump_files/save_result_ins_0.json";
+    "/home/ksenia/datasets/batch_instance.csv";
+pub const INS_INPUT_FILENAME: &str = "/home/ksenia/datasets/save_result_ins.json";
 
 fn extend_dags(old_dag: &DAG) -> InstDag {
     let mut result = InstDag::new();

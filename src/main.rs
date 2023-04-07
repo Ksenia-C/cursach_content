@@ -544,7 +544,7 @@ fn gen_inst(dirpath: &str) {
 use std::env;
 use std::path::Path;
 
-fn type_devided() {
+fn type_devided(k_part: usize) {
     // read graphs data
     let jobs = PureDags::get_from_file(INS_INPUT_FILENAME);
 
@@ -630,8 +630,8 @@ fn type_devided() {
     ]
     .iter()
     {
-        println!("{} has {} dags", filename, jobs_container.dags.len());
-        jobs_container.save_to_file(filename);
+        println!("{}: {} has {} dags", k_part, filename, jobs_container.dags.len());
+        jobs_container.save_to_file(format!("{}{}", filename, k_part).as_str());
     }
     // save for other steps
 }
@@ -655,7 +655,7 @@ fn main() {
                 main_instances();
                 println!("Ok main instances");
             }
-            "form" => type_devided(),
+            "form" => type_devided(args[2].parse::<usize>().unwrap()),
             "pure" => process_pure_dags(source_dir, grapg_type, 38, final_dir.as_str()),
             "task" => gen_task_graph(100, final_dir.as_str()),
             "ins" => gen_inst(final_dir.as_str()),
