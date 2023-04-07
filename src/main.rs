@@ -25,158 +25,168 @@ fn calc_part(node_cnt: u32, critical_path: u32) -> u32 {
     return node_cnt / critical_path;
 }
 
-fn process_pure_dags(tt_input_file: &str, sample_cnt: usize, output_dir: &str) {
-    let mut pure_dags = PureDags::get_from_file(tt_input_file);
-    println!("Real work just starts");
-
-    {
-        let output_dir = String::from(output_dir) + "/tasks";
-        if Path::new(&output_dir).exists() {
-            fs::remove_dir_all(&output_dir).unwrap();
-        }
-        fs::create_dir(&output_dir).unwrap();
-        let pure_dags = pure_dags.samples(sample_cnt);
-
-        for (job_name, pure_dag) in pure_dags.iter() {
-            // if pure_dag.node_count() < 7 {
-            //     continue;
-            // }
-            let task_dag1 = <TaskDag as TaskDagFuncs>::from_pure_dag(&pure_dag);
-            task_dag1.save_to_file(&format!("{}/{}.json", &output_dir, job_name).to_string());
-            task_dag1.save_to_dot(&format!("{}/{}.dot", &output_dir, job_name).to_string());
-        }
-    }
-
+fn process_pure_dags(tt_input_dir: String, graph_type: &str, sample_cnt: usize, output_dir: &str) {
     // Examples of calc stat
     let mut cp_ranges = CpStatistic::new();
     let mut level_distr_gen = StructStatistic::new();
     let mut level_gen = LevelGenerator::new();
 
-    for (_job_name, graph) in pure_dags.dags.iter_mut() {
-        graph.sort_node_ids();
-        let node_cnt = graph.node_count();
-        let mut depths = vec![0; node_cnt];
-        let mut levels = vec![0; node_cnt];
+    let paths = fs::read_dir(tt_input_dir).unwrap();
 
-        graph.calc_levels(&mut depths, &mut levels);
+    for path in paths {
+        let path = path.unwrap().path().display().to_string();
+        if !path.contains(graph_type) {
+            continue;
+        }
+        println!("{}", path);
 
-        let critical_path = depths.iter().max().unwrap();
-        // println!("{:?}", critical_path);
-        cp_ranges.add(critical_path, node_cnt as u32);
+        let mut pure_dags = PureDags::get_from_file(path.as_str());
+        println!("Real work just starts");
 
-        let part = calc_part(node_cnt as u32, *critical_path);
-        level_distr_gen.add(*critical_path, part, &levels);
+        {
+            let output_dir = String::from(output_dir) + "/tasks";
+            if Path::new(&output_dir).exists() {
+                fs::remove_dir_all(&output_dir).unwrap();
+            }
+            fs::create_dir(&output_dir).unwrap();
+            // let pure_dags = pure_dags.samples(sample_cnt);
 
-        // many massive statistics/ Yes, bad api again, but better
+            // for (job_name, pure_dag) in pure_dags.iter() {
+            //     // if pure_dag.node_count() < 7 {
+            //     //     continue;
+            //     // }
+            //     let task_dag1 = <TaskDag as TaskDagFuncs>::from_pure_dag(&pure_dag);
+            //     task_dag1.save_to_file(&format!("{}/{}.json", &output_dir, job_name).to_string());
+            //     task_dag1.save_to_dot(&format!("{}/{}.dot", &output_dir, job_name).to_string());
+            // }
+        }
 
-        level_gen.add_statistic(
-            *critical_path,
-            part,
-            "childs_distribution",
-            graph,
-            |graph: &PureDag| -> Vec<Vec<u32>> {
-                let mut result = vec![Vec::new(); *critical_path as usize];
-                for node_ind in graph.node_indices() {
-                    let child_cnt = graph.neighbors(node_ind).count();
-                    result[levels[node_ind.index() as usize] as usize].push(child_cnt as u32);
-                }
-                return result;
-            },
-        );
-        level_gen.add_statistic(
-            *critical_path,
-            part,
-            "dependances_distribution",
-            graph,
-            |graph: &PureDag| -> Vec<Vec<u32>> {
-                let mut result = vec![Vec::new(); *critical_path as usize];
-                for node_ind in graph.node_indices() {
-                    let dep_cnt = graph.node_weight(node_ind).unwrap().dependences.len();
-                    result[levels[node_ind.index() as usize] as usize].push(dep_cnt as u32);
-                }
-                return result;
-            },
-        );
-        level_gen.add_statistic(
-            *critical_path,
-            part,
-            "instance_distr_init",
-            graph,
-            |graph: &PureDag| -> Vec<Vec<u32>> {
-                let mut result = vec![Vec::new(); *critical_path as usize];
-                for node_ind in graph.node_indices() {
-                    let node_info = graph.node_weight(node_ind).unwrap();
-                    let node_level = levels[node_ind.index() as usize];
-                    if node_info.dependences.len() == 0 {
-                        result[node_level as usize]
-                            .push(node_info.instance_cnt.min(MAX_INST_CNT) as u32);
+        for (_job_name, graph) in pure_dags.dags.iter_mut() {
+            graph.sort_node_ids();
+            let node_cnt = graph.node_count();
+            let mut depths = vec![0; node_cnt];
+            let mut levels = vec![0; node_cnt];
+
+            graph.calc_levels(&mut depths, &mut levels);
+
+            let critical_path = depths.iter().max().unwrap();
+            // println!("{:?}", critical_path);
+            cp_ranges.add(critical_path, node_cnt as u32);
+
+            let part = calc_part(node_cnt as u32, *critical_path);
+            level_distr_gen.add(*critical_path, part, &levels);
+
+            // many massive statistics/ Yes, bad api again, but better
+
+            level_gen.add_statistic(
+                *critical_path,
+                part,
+                "childs_distribution",
+                graph,
+                |graph: &PureDag| -> Vec<Vec<u32>> {
+                    let mut result = vec![Vec::new(); *critical_path as usize];
+                    for node_ind in graph.node_indices() {
+                        let child_cnt = graph.neighbors(node_ind).count();
+                        result[levels[node_ind.index() as usize] as usize].push(child_cnt as u32);
                     }
-                }
-                return result;
-            },
-        );
-        level_gen.add_statistic(
-            *critical_path,
-            part,
-            "instance_distr_perc",
-            graph,
-            |graph: &PureDag| -> Vec<Vec<u32>> {
-                let mut result = vec![Vec::new(); *critical_path as usize];
-                for node_ind in graph.node_indices() {
-                    let node_info = graph.node_weight(node_ind).unwrap();
-                    let node_level = levels[node_ind.index() as usize];
-
-                    if node_info.dependences.len() != 0 {
-                        let mut depence_ins_avg = 0;
-                        for parent in node_info.dependences.iter() {
-                            depence_ins_avg += graph
-                                .node_weight(NodeIndex::new(*parent as usize))
-                                .unwrap()
-                                .instance_cnt
-                                .min(MAX_INST_CNT);
+                    return result;
+                },
+            );
+            level_gen.add_statistic(
+                *critical_path,
+                part,
+                "dependances_distribution",
+                graph,
+                |graph: &PureDag| -> Vec<Vec<u32>> {
+                    let mut result = vec![Vec::new(); *critical_path as usize];
+                    for node_ind in graph.node_indices() {
+                        let dep_cnt = graph.node_weight(node_ind).unwrap().dependences.len();
+                        result[levels[node_ind.index() as usize] as usize].push(dep_cnt as u32);
+                    }
+                    return result;
+                },
+            );
+            level_gen.add_statistic(
+                *critical_path,
+                part,
+                "instance_distr_init",
+                graph,
+                |graph: &PureDag| -> Vec<Vec<u32>> {
+                    let mut result = vec![Vec::new(); *critical_path as usize];
+                    for node_ind in graph.node_indices() {
+                        let node_info = graph.node_weight(node_ind).unwrap();
+                        let node_level = levels[node_ind.index() as usize];
+                        if node_info.dependences.len() == 0 {
+                            result[node_level as usize]
+                                .push(node_info.instance_cnt.min(MAX_INST_CNT) as u32);
                         }
-                        // Logic
-                        depence_ins_avg /= node_info.dependences.len() as u64;
-                        result[node_level as usize].push(
-                            (node_info.instance_cnt.min(MAX_INST_CNT) * 10000 / depence_ins_avg)
-                                as u32,
-                        );
                     }
-                }
-                return result;
-            },
-        );
+                    return result;
+                },
+            );
+            level_gen.add_statistic(
+                *critical_path,
+                part,
+                "instance_distr_perc",
+                graph,
+                |graph: &PureDag| -> Vec<Vec<u32>> {
+                    let mut result = vec![Vec::new(); *critical_path as usize];
+                    for node_ind in graph.node_indices() {
+                        let node_info = graph.node_weight(node_ind).unwrap();
+                        let node_level = levels[node_ind.index() as usize];
 
-        let (result_time, _, _) = graph.get_inst_inf(*critical_path as usize, &levels);
+                        if node_info.dependences.len() != 0 {
+                            let mut depence_ins_avg = 0;
+                            for parent in node_info.dependences.iter() {
+                                depence_ins_avg += graph
+                                    .node_weight(NodeIndex::new(*parent as usize))
+                                    .unwrap()
+                                    .instance_cnt
+                                    .min(MAX_INST_CNT);
+                            }
+                            // Logic
+                            depence_ins_avg /= node_info.dependences.len() as u64;
+                            result[node_level as usize].push(
+                                (node_info.instance_cnt.min(MAX_INST_CNT) * 10000 / depence_ins_avg)
+                                    as u32,
+                            );
+                        }
+                    }
+                    return result;
+                },
+            );
 
-        level_gen.add_statistic(
-            *critical_path,
-            part,
-            "heavy_distr",
-            graph,
-            |graph: &PureDag| -> Vec<Vec<u32>> {
-                let mut result = vec![Vec::new(); *critical_path as usize];
-                for node_ind in graph.node_indices() {
-                    let node_info = graph.node_weight(node_ind).unwrap();
-                    let node_level = levels[node_ind.index() as usize];
-                    let ins_cnt = node_info.instance_cnt.min(MAX_INST_CNT) as f64;
-                    let time_amnt = (node_info.end_time - node_info.start_time) as f64;
-                    let heavy_score = 2.0 * ins_cnt * time_amnt / (ins_cnt + time_amnt);
-                    result[node_level as usize].push(heavy_score as u32);
-                }
-                return result;
-            },
-        );
+            let (result_time, _, _) = graph.get_inst_inf(*critical_path as usize, &levels);
 
-        level_gen.add_statistic(
-            *critical_path,
-            part,
-            "time_distrib",
-            graph,
-            move |_: &PureDag| -> Vec<Vec<u32>> {
-                return result_time;
-            },
-        );
+            level_gen.add_statistic(
+                *critical_path,
+                part,
+                "heavy_distr",
+                graph,
+                |graph: &PureDag| -> Vec<Vec<u32>> {
+                    let mut result = vec![Vec::new(); *critical_path as usize];
+                    for node_ind in graph.node_indices() {
+                        let node_info = graph.node_weight(node_ind).unwrap();
+                        let node_level = levels[node_ind.index() as usize];
+                        let ins_cnt = node_info.instance_cnt.min(MAX_INST_CNT) as f64;
+                        let time_amnt = (node_info.end_time - node_info.start_time) as f64;
+                        let heavy_score = 2.0 * ins_cnt * time_amnt / (ins_cnt + time_amnt);
+                        result[node_level as usize].push(heavy_score as u32);
+                    }
+                    return result;
+                },
+            );
+
+            level_gen.add_statistic(
+                *critical_path,
+                part,
+                "time_distrib",
+                graph,
+                move |_: &PureDag| -> Vec<Vec<u32>> {
+                    return result_time;
+                },
+            );
+        }
     }
 
     {
@@ -429,36 +439,40 @@ fn gen_task_graph(sample_cnt: usize, work_dir: &str) {
             node_level[i] = i as u32;
             result_dag.add_task_endge(NodeIndex::new(i), NodeIndex::new(i - 1));
         }
-        // asign_edge_for_incr(
-        //     node_cnt,
-        //     cp,
-        //     part,
-        //     &mut node_level,
-        //     &level_gen,
-        //     &mut result_dag,
-        //     &mut rnd,
-        //     &level_distr_gen,
-        // );
-        // asign_edge_for_decr(
-        //     node_cnt,
-        //     cp,
-        //     part,
-        //     &mut node_level,
-        //     &level_gen,
-        //     &mut result_dag,
-        //     &mut rnd,
-        //     &level_distr_gen,
-        // );
-        asign_edge_for_other(
-            node_cnt,
-            cp,
-            part,
-            &mut node_level,
-            &level_gen,
-            &mut result_dag,
-            &mut rnd,
-            &level_distr_gen,
-        );
+        if work_dir.contains("incr") {
+            asign_edge_for_incr(
+                node_cnt,
+                cp,
+                part,
+                &mut node_level,
+                &level_gen,
+                &mut result_dag,
+                &mut rnd,
+                &level_distr_gen,
+            );
+        } else if work_dir.contains("decr") {
+            asign_edge_for_decr(
+                node_cnt,
+                cp,
+                part,
+                &mut node_level,
+                &level_gen,
+                &mut result_dag,
+                &mut rnd,
+                &level_distr_gen,
+            );
+        } else {
+            asign_edge_for_other(
+                node_cnt,
+                cp,
+                part,
+                &mut node_level,
+                &level_gen,
+                &mut result_dag,
+                &mut rnd,
+                &level_distr_gen,
+            );
+        }
 
         for i in 0..node_cnt {
             let cur_node_ind = NodeIndex::new(i as usize);
@@ -524,6 +538,7 @@ fn gen_inst(dirpath: &str) {
         result_dag.load_from_file(&format!("{}/tasks/{}.json", dirpath, filename).to_string());
         let instance_dag = result_dag.convert_to_inst_dag(&mut rnd, CCR);
         instance_dag.save_to_dot(&format!("{}/inss/{}.dot", dirpath, filename).to_string());
+        instance_dag.save_to_yaml(&format!("{}/inss/{}.yaml", dirpath, filename).to_string());
     }
 }
 use std::env;
@@ -609,9 +624,9 @@ fn type_devided() {
     println!("tree is found at count: {}", glocal_tree_cnts);
 
     for (filename, jobs_container) in [
-        ("tree_incr3", jobs_tree_increase),
-        ("tree_decr3", jobs_tree_decrease),
-        ("other3", jobs_tree_others),
+        ("tree_incr", jobs_tree_increase),
+        ("tree_decr", jobs_tree_decrease),
+        ("other", jobs_tree_others),
     ]
     .iter()
     {
@@ -629,7 +644,8 @@ fn main() {
     } else {
         "other"
     };
-    let source_dir = format!("../by_graph_type/{}.json", grapg_type);
+
+    let source_dir = String::from("../by_graph_type/");
     let final_dir = format!("../{}", grapg_type);
     if args.len() > 1 {
         match &args[1][..] {
@@ -640,11 +656,11 @@ fn main() {
                 println!("Ok main instances");
             }
             "form" => type_devided(),
-            "pure" => process_pure_dags(source_dir.as_str(), 38, final_dir.as_str()),
+            "pure" => process_pure_dags(source_dir, grapg_type, 38, final_dir.as_str()),
             "task" => gen_task_graph(100, final_dir.as_str()),
             "ins" => gen_inst(final_dir.as_str()),
             _ => {
-                println!("from_csv -> form -> pure -> task -> ins");
+                println!("from_csv -> form -> pure -> task -> ins \n tree_incr tree_decr other");
             }
         };
     }

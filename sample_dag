@@ -1,0 +1,1 @@
+{"nodes":[{"task_name":"task3","dependencies":[1],"instance_cnt":1,"flops":15.0},{"task_name":"task1","dependencies":[],"instance_cnt":8,"flops":15.0},{"task_name":"task2","dependencies":[1],"instance_cnt":1,"flops":15.0}],"node_holes":[],"edge_property":"directed","edges":[[1,0,1],[1,2,1]]}

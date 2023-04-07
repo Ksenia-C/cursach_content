@@ -329,16 +329,17 @@ impl StatBase for LevelGenerator {
                 for (part, part_values) in cp_values.iter() {
                     let mut result_level = Vec::new();
                     for level_stat in part_values.iter() {
-                        // if level_stat.count() == 0 {
-                        //     continue;
-                        // }
-                        let result_stat = level_stat
-                            .percentiles(&BASIC_PERCENTILES)
-                            .unwrap()
-                            .unwrap()
-                            .iter()
-                            .map(|&x| x)
-                            .collect::<Vec<f64>>();
+                        let result_stat = if level_stat.count() == 0 {
+                            vec![0.0; 5]
+                        } else {
+                            level_stat
+                                .percentiles(&BASIC_PERCENTILES)
+                                .unwrap()
+                                .unwrap()
+                                .iter()
+                                .map(|&x| x)
+                                .collect::<Vec<f64>>()
+                        };
                         result_level.push(result_stat);
                     }
                     result_part.insert(*part, result_level);

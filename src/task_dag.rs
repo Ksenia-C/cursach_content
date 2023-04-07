@@ -1,4 +1,4 @@
-use crate::instance::{InstDagVertex, InstanceDag};
+use crate::instance::{AddEdge, InstDagVertex, InstanceDag};
 use rand::rngs::ThreadRng;
 use rand::Rng;
 
@@ -79,6 +79,7 @@ impl TaskDagFuncs for TaskDag {
         let node_cnt = self.node_count();
         let mut start_task_index: Vec<usize> = vec![0; node_cnt];
         let mut vector_edge: Vec<f64> = vec![0.0; node_cnt];
+
         for node_ind in self.node_indices() {
             let node_info = self.node_weight(node_ind).unwrap();
             // gen instance with flops
@@ -114,9 +115,9 @@ impl TaskDagFuncs for TaskDag {
                     let parent_info = self.node_weight(parent).unwrap();
                     let mut parent_ind_sl = start_task_index[parent.index()];
                     for _ in 0..parent_info.instance_cnt {
-                        instance_dag.add_edge(
-                            NodeIndex::new(parent_ind_sl),
-                            NodeIndex::new(node_ind_sl),
+                        instance_dag.add_ins_edge(
+                            parent_ind_sl,
+                            node_ind_sl,
                             vector_edge[parent.index()],
                         );
                         (node_ind_sl, parent_ind_sl) = (node_ind_sl + 1, parent_ind_sl + 1);
@@ -135,11 +136,7 @@ impl TaskDagFuncs for TaskDag {
                         let mut node_ind_sl = start_task_index[node_ind.index()];
 
                         for _ in 0..parent_info.instance_cnt {
-                            instance_dag.add_edge(
-                                NodeIndex::new(parent_ind_sl),
-                                NodeIndex::new(node_ind_sl),
-                                parent_edge_out,
-                            );
+                            instance_dag.add_ins_edge(parent_ind_sl, node_ind_sl, parent_edge_out);
                             (node_ind_sl, parent_ind_sl) = (node_ind_sl + 1, parent_ind_sl + 1);
                         }
                     } else {
@@ -150,9 +147,9 @@ impl TaskDagFuncs for TaskDag {
                             for node_ind_sl in (0..node_info.instance_cnt)
                                 .map(|x| start_task_index[node_ind.index()] + x as usize)
                             {
-                                instance_dag.add_edge(
-                                    NodeIndex::new(parent_ind_sl),
-                                    NodeIndex::new(node_ind_sl),
+                                instance_dag.add_ins_edge(
+                                    parent_ind_sl,
+                                    node_ind_sl,
                                     parent_edge_out,
                                 );
                             }
