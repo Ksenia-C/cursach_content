@@ -4,17 +4,25 @@ use crate::statistic::*;
 use crate::task_dag::*;
 use absorb::{main_instances, main_tasks, INS_INPUT_FILENAME};
 // use petgraph::graph::{self, Node};
+use crate::get_gen_dag_stat::*;
 use petgraph::stable_graph::NodeIndex;
 use queues::*;
 use rand::prelude::SliceRandom;
+use std::collections::HashMap;
+
+use crate::get_dag_stat::*;
 
 use rand::rngs::ThreadRng;
 use rand::Rng;
 pub mod absorb;
+pub mod get_dag_stat;
+pub mod get_gen_dag_stat;
 pub mod instance;
 pub mod pure_dag;
 pub mod statistic;
 pub mod task_dag;
+
+use env_logger::Builder;
 
 // const TT_INPUT_FILENAME: &str = "../by_graph_type/tree_incr.json";
 const CP_RANGES_FILENAME: &str = "cp_ranges.json";
@@ -33,7 +41,26 @@ fn process_pure_dags(tt_input_dir: String, graph_type: &str, sample_cnt: usize, 
 
     let paths = fs::read_dir(tt_input_dir).unwrap();
 
+    {
+        let output_dir = String::from(output_dir) + "/tasks";
+        if Path::new(&output_dir).exists() {
+            fs::remove_dir_all(&output_dir).unwrap();
+        }
+        fs::create_dir(&output_dir).unwrap();
+    }
+    let mut cnt_cp = HashMap::<u32, usize>::new();
+
     for path in paths {
+        let mut dags_to_sample: HashMap<(u32, u32), Vec<String>> = [
+            ((2, 4), Vec::new()),
+            ((5, 7), Vec::new()),
+            ((8, 10), Vec::new()),
+            ((11, 14), Vec::new()),
+            ((19, 24), Vec::new()),
+        ]
+        .iter()
+        .cloned()
+        .collect();
         let path = path.unwrap().path().display().to_string();
         if !path.contains(graph_type) {
             continue;
@@ -41,7 +68,8 @@ fn process_pure_dags(tt_input_dir: String, graph_type: &str, sample_cnt: usize, 
         println!("{}", path);
 
         let mut pure_dags = PureDags::get_from_file(path.as_str());
-        println!("Real work just starts");
+
+        // println!("Real work just starts");
 
         {
             let output_dir = String::from(output_dir) + "/tasks";
@@ -70,6 +98,15 @@ fn process_pure_dags(tt_input_dir: String, graph_type: &str, sample_cnt: usize, 
             graph.calc_levels(&mut depths, &mut levels);
 
             let critical_path = depths.iter().max().unwrap();
+
+            // *cnt_cp.entry(*critical_path).or_insert(0) += 1;
+
+            for (cp_range, sample_ex) in dags_to_sample.iter_mut() {
+                if cp_range.0 <= *critical_path && *critical_path <= cp_range.1 {
+                    sample_ex.push((*_job_name).clone());
+                }
+            }
+
             // println!("{:?}", critical_path);
             cp_ranges.add(critical_path, node_cnt as u32);
 
@@ -187,8 +224,31 @@ fn process_pure_dags(tt_input_dir: String, graph_type: &str, sample_cnt: usize, 
                 },
             );
         }
-    }
+        let mut rnd = rand::thread_rng();
+        for (cp_range, sample_ex) in dags_to_sample.iter_mut() {
+            sample_ex.shuffle(&mut rnd);
+            for key in sample_ex[..sample_cnt.min(sample_ex.len())].iter() {
+                let pure_dag = pure_dags.dags[key].clone();
 
+                let task_dag1 = <TaskDag as TaskDagFuncs>::from_pure_dag(&pure_dag);
+                task_dag1.save_to_file(
+                    &format!(
+                        "{}/tasks/{}_{}_{}.json",
+                        &output_dir, cp_range.0, cp_range.1, key
+                    )
+                    .to_string(),
+                );
+                task_dag1.save_to_dot(
+                    &format!(
+                        "{}/tasks/{}_{}_{}.dot",
+                        &output_dir, cp_range.0, cp_range.1, key
+                    )
+                    .to_string(),
+                );
+            }
+        }
+        dags_to_sample.clear();
+    }
     {
         let output_dir = String::from(output_dir) + "/stats";
         let stat_name = |filename: &str| -> String { format!("{}/{}", output_dir, filename) };
@@ -197,9 +257,6 @@ fn process_pure_dags(tt_input_dir: String, graph_type: &str, sample_cnt: usize, 
         level_gen.save_to_file(&stat_name(LEVEL_GENERAOTR_FILENAME).to_string());
     }
 }
-
-const MIN_CP: u32 = 5;
-const MAX_CP: u32 = 7;
 
 #[allow(dead_code)]
 fn asign_edge_for_incr(
@@ -390,7 +447,7 @@ fn asign_edge_for_other(
     }
 }
 
-fn gen_task_graph(sample_cnt: usize, work_dir: &str) {
+fn gen_task_graph(sample_cnt: usize, work_dir: &str, min_cp: u32, max_cp: u32) {
     // Examples of use stat
     let mut cp_gen_ranges = CpStatistic::new();
     let mut level_distr_gen = StructStatistic::new();
@@ -406,12 +463,14 @@ fn gen_task_graph(sample_cnt: usize, work_dir: &str) {
 
     let mut rnd = rand::thread_rng();
     for job_gen in 0..sample_cnt {
-        let cp = rnd.gen_range(MIN_CP..MAX_CP) as u32;
+        let (cp, node_cnt) = loop {
+            let cp = rnd.gen_range(min_cp..=max_cp) as u32;
 
-        let node_cnt = cp_gen_ranges.get_node_cnt(&mut rnd, cp);
-        if node_cnt.is_none() {
-            return;
-        }
+            let node_cnt = cp_gen_ranges.get_node_cnt(&mut rnd, cp);
+            if !node_cnt.is_none() {
+                break (cp, node_cnt);
+            }
+        };
         let node_cnt = node_cnt.unwrap();
         let mut result_dag = TaskDag::new();
 
@@ -420,6 +479,11 @@ fn gen_task_graph(sample_cnt: usize, work_dir: &str) {
 
         // asign levels
         // let node_cnt = node_cnt * 10;
+        let node_cnt = if work_dir.contains("incr") {
+            2 * node_cnt
+        } else {
+            node_cnt
+        };
         let mut node_level: Vec<u32> = vec![0; node_cnt as usize];
         for i in 0..cp {
             *node_level.get_mut(i as usize).unwrap() = i;
@@ -504,44 +568,63 @@ fn gen_task_graph(sample_cnt: usize, work_dir: &str) {
             asign_weight.flops = flops_sz;
         }
 
-        result_dag.save_to_file(&format!("{}/tasks/{}.json", work_dir, job_gen).to_string());
-        result_dag.save_to_dot(&format!("{}/tasks/{}.dot", work_dir, job_gen).to_string());
+        result_dag.save_to_file(
+            &format!("{}/tasks/{}_{}_{}.json", work_dir, min_cp, max_cp, job_gen).to_string(),
+        );
+        result_dag.save_to_dot(
+            &format!("{}/tasks/{}_{}_{}.dot", work_dir, min_cp, max_cp, job_gen).to_string(),
+        );
     }
 }
 
-const CCR: f64 = 11.0; // comp / comm
+const CCR: f64 = 11.0; // comp / comm 1.0, 10.0, 0.1
 use std::fs;
 
-fn gen_inst(dirpath: &str) {
+fn gen_inst(dirpath: &str, ccr_use: f64) {
     let mut rnd = rand::thread_rng();
     let paths = fs::read_dir(format!("{}/tasks", dirpath)).unwrap();
     let mut result_dag = TaskDag::new();
 
-    let inst_dir = format!("{}/inss/", dirpath);
-    if Path::new(&inst_dir).exists() {
-        fs::remove_dir_all(&inst_dir).unwrap();
+    let inst_dir = format!("{}/inss_rev/", dirpath);
+    if ccr_use < 0.9 {
+        if Path::new(&inst_dir).exists() {
+            fs::remove_dir_all(&inst_dir).unwrap();
+        }
+        fs::create_dir(&inst_dir).unwrap();
     }
-    fs::create_dir(&inst_dir).unwrap();
 
     for path in paths {
         let path = path.unwrap().file_name().into_string().unwrap();
         let file_part = path.split('.').collect::<Vec<&str>>();
         let filename: &str = file_part[0];
         let file_ext = file_part[1];
-        if file_ext != "dot" {
+        if file_ext != "json" {
             continue;
         }
         // if filename != "j_641635" {
         //     continue;
         // }
-        // println!("{}", filename);
+        // println!("{}", ccr_use);
         result_dag.load_from_file(&format!("{}/tasks/{}.json", dirpath, filename).to_string());
-        let instance_dag = result_dag.convert_to_inst_dag(&mut rnd, CCR);
-        instance_dag.save_to_dot(&format!("{}/inss/{}.dot", dirpath, filename).to_string());
-        instance_dag.save_to_yaml(&format!("{}/inss/{}.yaml", dirpath, filename).to_string());
+        let instance_dag = result_dag.convert_to_inst_dag(&mut rnd, ccr_use);
+        instance_dag.save_to_dot(
+            &format!("{}/inss_rev/{}_{}.dot", dirpath, filename, ccr_use * 10.0).to_string(),
+        );
+        instance_dag.save_to_yaml(
+            &format!("{}/inss_rev/{}_{}.yaml", dirpath, filename, ccr_use * 10.0).to_string(),
+        );
+        instance_dag.save_to_yaml_rev(
+            &format!(
+                "{}/inss_rev/{}_{}.rev.yaml",
+                dirpath,
+                filename,
+                ccr_use * 10.0
+            )
+            .to_string(),
+        );
     }
 }
-use std::env;
+
 use std::path::Path;
 
 fn type_devided(k_part: usize) {
@@ -630,39 +713,105 @@ fn type_devided(k_part: usize) {
     ]
     .iter()
     {
-        println!("{}: {} has {} dags", k_part, filename, jobs_container.dags.len());
+        println!(
+            "{}: {} has {} dags",
+            k_part,
+            filename,
+            jobs_container.dags.len()
+        );
         jobs_container.save_to_file(format!("{}{}", filename, k_part).as_str());
     }
     // save for other steps
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
+use clap::Parser;
 
-    let grapg_type: &str = if args.len() > 2 {
-        &args[2][..]
-    } else {
-        "other"
-    };
+#[derive(Parser, Debug)]
+#[clap(about, long_about = None)]
+struct Args {
+    /// Take resouces from this directory
+    #[clap(long, default_value = "help")]
+    action: String,
+
+    /// Take graphs from this directory
+    #[clap(long, default_value = "other")]
+    graph_type: String,
+
+    /// Dump results into this directory
+    #[clap(long, default_value_t = 5)]
+    min_cp: u32,
+
+    /// Dump results into this directory
+    #[clap(long, default_value_t = 7)]
+    max_cp: u32,
+
+    /// Dump results into this directory
+    #[clap(long, default_value_t = 0)]
+    k_part: usize,
+
+    /// Dump results into this directory
+    #[clap(long, default_value_t = 10.0)]
+    ccr_set: f64,
+
+    /// Dump results into this directory
+    #[clap(long, default_value = "unknown")]
+    stat_task_name: String,
+}
+use std::io::Write;
+
+fn main() {
+    Builder::from_default_env()
+        .format(|buf, record| writeln!(buf, "{}", record.args()))
+        .init();
+    let args = Args::parse();
+
+    let grapg_type: &str = &args.graph_type;
 
     let source_dir = String::from("../by_graph_type/");
     let final_dir = format!("../{}", grapg_type);
-    if args.len() > 1 {
-        match &args[1][..] {
-            "from_csv" => {
-                // main_tasks();
-                // println!("Ok main tasks");
-                main_instances();
-                println!("Ok main instances");
-            }
-            "form" => type_devided(args[2].parse::<usize>().unwrap()),
-            "pure" => process_pure_dags(source_dir, grapg_type, 38, final_dir.as_str()),
-            "task" => gen_task_graph(100, final_dir.as_str()),
-            "ins" => gen_inst(final_dir.as_str()),
-            _ => {
-                println!("from_csv -> form -> pure -> task -> ins \n tree_incr tree_decr other");
-            }
-        };
-    }
+    match args.action.as_str() {
+        "from_csv" => {
+            // main_tasks();
+            // println!("Ok main tasks");
+            main_instances();
+            println!("Ok main instances");
+        }
+        "form" => type_devided(args.k_part),
+        "pure" => process_pure_dags(source_dir, grapg_type, 40, final_dir.as_str()),
+        "task" => gen_task_graph(100, final_dir.as_str(), args.min_cp, args.max_cp),
+        "ins" => gen_inst(final_dir.as_str(), args.ccr_set),
+        "alib_art" => {
+            stat_pure_dags(
+                source_dir,
+                format!("./st/pures_{}", args.stat_task_name).as_str(),
+            );
+            stat_task_dags(
+                String::from("../tree_incr/tasks"),
+                format!("./st/incr_{}", args.stat_task_name).as_str(),
+            );
+            stat_task_dags(
+                String::from("../tree_decr/tasks"),
+                format!("./st/decr_{}", args.stat_task_name).as_str(),
+            );
+            stat_task_dags(
+                String::from("../other/tasks"),
+                format!("./st/other_{}", args.stat_task_name).as_str(),
+            );
+        }
+        "char_gr" => {
+            char_pure_dags(&source_dir, "tree_incr", "./cr/pures_incr");
+
+            char_task_dags(String::from("../tree_incr/tasks"), "tree_incr", "./cr/incr");
+            char_task_dags(String::from("../tree_decr/tasks"), "tree_decr", "./cr/decr");
+            char_task_dags(String::from("../other/tasks"), "other", "./cr/other");
+
+            char_pure_dags(&source_dir, "other", "./cr/pures_other");
+            char_pure_dags(&source_dir, "tree_decr", "./cr/pures_decr");
+        }
+        _ => {
+            println!("from_csv -> form -> pure -> task -> ins \n tree_incr tree_decr other");
+        }
+    };
+
     println!("Ok");
 }

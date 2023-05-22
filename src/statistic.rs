@@ -79,7 +79,7 @@ impl CpStatistic {
                 return None;
             }
         };
-        return Some(rnd.gen_range(cp_range.0..cp_range.1).ceil() as u32);
+        return Some(rnd.gen_range(cp_range.0..=cp_range.1).ceil() as u32);
     }
 }
 
@@ -317,6 +317,7 @@ impl LevelGenerator {
 }
 
 const BASIC_PERCENTILES: [f64; 5] = [0.0, 0.2, 0.3, 0.6, 1.0];
+// const BASIC_PERCENTILES: [f64; 5] = [0.0, 0.2, 0.4, 0.8, 1.0]; is better but previos is not totaly aweful
 
 impl StatBase for LevelGenerator {
     fn form_stats(&mut self) {

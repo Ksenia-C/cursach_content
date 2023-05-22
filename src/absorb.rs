@@ -8,6 +8,8 @@ struct Instance {
     time: u64,
     cpu_avg: f64,
     cpu_diff_max: f64,
+    mem_avg: f64,
+    mem_diff_max: f64,
 }
 
 type InstDag = Graph<TaskInstInfo, u64, Directed>;
@@ -35,8 +37,7 @@ type DAG = Graph<TaskInfo, u64, Directed>;
 
 const BATCH_TASK_FILE: &str = "/home/ksenia/datasets/batch_task.csv";
 const MAX_GRAPHS: i32 = 100000;
-const BATCH_INSTANCE_FILENAME: &str =
-    "/home/ksenia/datasets/batch_instance.csv";
+const BATCH_INSTANCE_FILENAME: &str = "/home/ksenia/datasets/batch_instance.csv";
 pub const INS_INPUT_FILENAME: &str = "/home/ksenia/datasets/save_result_ins.json";
 
 fn extend_dags(old_dag: &DAG) -> InstDag {
@@ -339,7 +340,7 @@ pub fn main_instances() {
             println!("{:?}", record);
             panic!("start {} < end {}", start_time, end_time);
         }
-        let mut ins_duraction = end_time - start_time;
+        let ins_duraction = end_time - start_time;
 
         if !jobs_with_instances.contains_key(job_name) {
             jobs_with_instances.insert(job_name.to_string(), extend_dags(&job_ins));
@@ -360,9 +361,26 @@ pub fn main_instances() {
             }
         };
 
+        let avg_mem_sage = match record.get(12).unwrap().parse::<f64>() {
+            Ok(avg_mem_sage) => avg_mem_sage,
+            Err(_) => {
+                unterminated_jobs.insert(job_name.to_string());
+                continue;
+            }
+        };
+        let max_mem_sage = match record.get(13).unwrap().parse::<f64>() {
+            Ok(max_mem_sage) => max_mem_sage,
+            Err(_) => {
+                unterminated_jobs.insert(job_name.to_string());
+                continue;
+            }
+        };
+
         // Logic Todo check if use that
-        let cpu_cnt = (avg_cpu_sage + 99.0) / 100.0;
-        ins_duraction *= (cpu_cnt * 0.8).round() as u64;
+        // let cpu_cnt = (avg_cpu_sage + 99.0) / 100.0;
+        // ins_duraction *= (cpu_cnt * 0.8).round() as u64;
+
+        // ins_duraction = (ins_duraction as f64 * avg_cpu_sage).round() as u64;
 
         match graph.node_weight_mut(*task_ind) {
             None => {
@@ -376,6 +394,8 @@ pub fn main_instances() {
                 time: ins_duraction,
                 cpu_avg: avg_cpu_sage,
                 cpu_diff_max: max_cpu_sage - avg_cpu_sage,
+                mem_avg: avg_mem_sage,
+                mem_diff_max: max_mem_sage - avg_mem_sage,
             }),
         }
         if max_cnt > 0 {
