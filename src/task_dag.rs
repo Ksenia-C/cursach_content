@@ -16,7 +16,7 @@ use std::path::Path;
 #[derive(Serialize, Deserialize)]
 pub struct DagVertex {
     pub task_name: String,
-    pub dependencies: Vec<u32>, // was vec of NodeIndex
+    pub dependencies: Vec<u32>,
     pub instance_cnt: u64,
     pub flops: f64,
 }
@@ -95,7 +95,7 @@ impl TaskDagFuncs for TaskDag {
             }
             vector_edge[node_ind.index()] = flops_sz / ccr * rnd.gen_range(0.9..1.1);
         }
-        // println!("{:?}", start_task_index);
+
         for node_ind in self.node_indices() {
             let node_info = self.node_weight(node_ind).unwrap();
             let mut parent_ins_sum = 0;
@@ -254,8 +254,6 @@ pub trait FeatureCount {
     fn chain_ratio(&self) -> f64;
     fn pairwise_ins_ration(&self) -> Vec<f64>;
     fn pairwise_flops_ration(&self) -> Vec<f64>;
-
-    fn narrow_dependen(&self) -> u32;
 }
 
 impl FeatureCount for TaskDag {
@@ -314,11 +312,5 @@ impl FeatureCount for TaskDag {
             }
         }
         return result;
-    }
-    fn narrow_dependen(&self) -> u32 {
-        return 0;
-        // for node_indo in self.node_weights() {
-        //     let my_inss_cnt = node_indo.instance_cnt;
-        // }
     }
 }

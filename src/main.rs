@@ -1,14 +1,15 @@
+use crate::get_gen_dag_stat::*;
 use crate::instance::*;
 use crate::pure_dag::*;
 use crate::statistic::*;
 use crate::task_dag::*;
 use absorb::{main_instances, main_tasks, INS_INPUT_FILENAME};
-// use petgraph::graph::{self, Node};
-use crate::get_gen_dag_stat::*;
 use petgraph::stable_graph::NodeIndex;
 use queues::*;
 use rand::prelude::SliceRandom;
 use std::collections::HashMap;
+use std::fs;
+use std::io::Write;
 
 use crate::get_dag_stat::*;
 
@@ -48,7 +49,6 @@ fn process_pure_dags(tt_input_dir: String, graph_type: &str, sample_cnt: usize, 
         }
         fs::create_dir(&output_dir).unwrap();
     }
-    let mut cnt_cp = HashMap::<u32, usize>::new();
 
     for path in paths {
         let mut dags_to_sample: HashMap<(u32, u32), Vec<String>> = [
@@ -65,11 +65,8 @@ fn process_pure_dags(tt_input_dir: String, graph_type: &str, sample_cnt: usize, 
         if !path.contains(graph_type) {
             continue;
         }
-        println!("{}", path);
 
         let mut pure_dags = PureDags::get_from_file(path.as_str());
-
-        // println!("Real work just starts");
 
         {
             let output_dir = String::from(output_dir) + "/tasks";
@@ -77,16 +74,6 @@ fn process_pure_dags(tt_input_dir: String, graph_type: &str, sample_cnt: usize, 
                 fs::remove_dir_all(&output_dir).unwrap();
             }
             fs::create_dir(&output_dir).unwrap();
-            // let pure_dags = pure_dags.samples(sample_cnt);
-
-            // for (job_name, pure_dag) in pure_dags.iter() {
-            //     // if pure_dag.node_count() < 7 {
-            //     //     continue;
-            //     // }
-            //     let task_dag1 = <TaskDag as TaskDagFuncs>::from_pure_dag(&pure_dag);
-            //     task_dag1.save_to_file(&format!("{}/{}.json", &output_dir, job_name).to_string());
-            //     task_dag1.save_to_dot(&format!("{}/{}.dot", &output_dir, job_name).to_string());
-            // }
         }
 
         for (_job_name, graph) in pure_dags.dags.iter_mut() {
@@ -99,15 +86,12 @@ fn process_pure_dags(tt_input_dir: String, graph_type: &str, sample_cnt: usize, 
 
             let critical_path = depths.iter().max().unwrap();
 
-            // *cnt_cp.entry(*critical_path).or_insert(0) += 1;
-
             for (cp_range, sample_ex) in dags_to_sample.iter_mut() {
                 if cp_range.0 <= *critical_path && *critical_path <= cp_range.1 {
                     sample_ex.push((*_job_name).clone());
                 }
             }
 
-            // println!("{:?}", critical_path);
             cp_ranges.add(critical_path, node_cnt as u32);
 
             let part = calc_part(node_cnt as u32, *critical_path);
@@ -181,7 +165,6 @@ fn process_pure_dags(tt_input_dir: String, graph_type: &str, sample_cnt: usize, 
                                     .instance_cnt
                                     .min(MAX_INST_CNT);
                             }
-                            // Logic
                             depence_ins_avg /= node_info.dependences.len() as u64;
                             result[node_level as usize].push(
                                 (node_info.instance_cnt.min(MAX_INST_CNT) * 10000 / depence_ins_avg)
@@ -288,7 +271,6 @@ fn asign_edge_for_incr(
                 .add(NodeIndex::new(last_level as usize))
                 .unwrap();
         }
-        // you
         let mut child_cnt = level_gen
             .get_statistic(cp, part, node_lv, "childs_distribution", rnd)
             .ceil() as usize;
@@ -357,7 +339,6 @@ fn asign_edge_for_decr(
                 .add(NodeIndex::new(last_level as usize))
                 .unwrap();
         }
-        // you
         let mut parent_cnt = level_gen
             .get_statistic(cp, part, node_lv, "dependances_distribution", rnd)
             .ceil() as usize;
@@ -423,7 +404,6 @@ fn asign_edge_for_other(
     }
     for level in 0..(cp - 1) {
         for node in by_level[level as usize].iter() {
-            // cause child_cnt is much less according to article
             let child_cnt = level_gen
                 .get_statistic(cp, part, level, "childs_distribution", rnd)
                 .ceil() as u32;
@@ -448,7 +428,6 @@ fn asign_edge_for_other(
 }
 
 fn gen_task_graph(sample_cnt: usize, work_dir: &str, min_cp: u32, max_cp: u32) {
-    // Examples of use stat
     let mut cp_gen_ranges = CpStatistic::new();
     let mut level_distr_gen = StructStatistic::new();
     let mut level_gen = LevelGenerator::new();
@@ -477,13 +456,6 @@ fn gen_task_graph(sample_cnt: usize, work_dir: &str, min_cp: u32, max_cp: u32) {
         let mut part = calc_part(node_cnt, cp);
         level_distr_gen.adjust_part(cp, &mut part);
 
-        // asign levels
-        // let node_cnt = node_cnt * 10;
-        let node_cnt = if work_dir.contains("incr") {
-            2 * node_cnt
-        } else {
-            node_cnt
-        };
         let mut node_level: Vec<u32> = vec![0; node_cnt as usize];
         for i in 0..cp {
             *node_level.get_mut(i as usize).unwrap() = i;
@@ -577,9 +549,6 @@ fn gen_task_graph(sample_cnt: usize, work_dir: &str, min_cp: u32, max_cp: u32) {
     }
 }
 
-const CCR: f64 = 11.0; // comp / comm 1.0, 10.0, 0.1
-use std::fs;
-
 fn gen_inst(dirpath: &str, ccr_use: f64) {
     let mut rnd = rand::thread_rng();
     let paths = fs::read_dir(format!("{}/tasks", dirpath)).unwrap();
@@ -601,10 +570,6 @@ fn gen_inst(dirpath: &str, ccr_use: f64) {
         if file_ext != "json" {
             continue;
         }
-        // if filename != "j_641635" {
-        //     continue;
-        // }
-        // println!("{}", ccr_use);
         result_dag.load_from_file(&format!("{}/tasks/{}.json", dirpath, filename).to_string());
         let instance_dag = result_dag.convert_to_inst_dag(&mut rnd, ccr_use);
         instance_dag.save_to_dot(
@@ -631,16 +596,12 @@ fn type_devided(k_part: usize) {
     // read graphs data
     let jobs = PureDags::get_from_file(INS_INPUT_FILENAME);
 
-    // let mut statistic_to_draw = CpStatistic::new();
-    println!("real work just start");
-
     let mut jobs_tree_increase = PureDags::new();
     let mut jobs_tree_decrease = PureDags::new();
     let mut jobs_tree_others = PureDags::new();
 
     let mut glocal_tree_cnts = 0;
     for (job_show, graph) in jobs.dags.into_iter() {
-        // println!("{}", job_show);
         let node_cnt = graph.node_count();
         let mut depths = vec![0; node_cnt];
         let mut used = vec![0; node_cnt];
@@ -654,9 +615,7 @@ fn type_devided(k_part: usize) {
         for ind in graph.node_indices() {
             let depend_len = graph.node_weight(ind).unwrap().dependences.len();
             if depend_len == 0 {
-                if graph.dfs(ind, &mut depths, &mut used, &mut is_tree) != 0 {
-                    // println!("find cycle in graph for job {}", job_show);
-                }
+                if graph.dfs(ind, &mut depths, &mut used, &mut is_tree) != 0 {}
             } else if depend_len > 1 {
                 is_chain = false;
             }
@@ -668,32 +627,10 @@ fn type_devided(k_part: usize) {
                 }
             }
         }
-        // for develop
-        // match *depths.iter().max().unwrap() {
-        //     4..=8 => {}
-        //     _ => continue,
-        // }
         if is_chain {
             continue;
         }
 
-        // if is_tree && jobs_tree_increase.dags.len() < 100 {
-        //     glocal_tree_cnts += 1;
-        //     jobs_tree_increase.insert(job_show, graph);
-        // } else if is_rev_tree && jobs_tree_decrease.dags.len() < 100 {
-        //     glocal_tree_cnts += 1;
-        //     jobs_tree_decrease.insert(job_show, graph);
-        // } else if jobs_tree_others.dags.len() < 100 {
-        //     jobs_tree_others.insert(job_show, graph);
-        // }
-        // if jobs_tree_increase.dags.len()
-        //     + jobs_tree_decrease.dags.len()
-        //     + jobs_tree_others.dags.len()
-        //     == 300
-        // {
-        //     break;
-        // }
-        // for real
         if is_tree {
             glocal_tree_cnts += 1;
             jobs_tree_increase.insert(job_show, graph);
@@ -721,7 +658,6 @@ fn type_devided(k_part: usize) {
         );
         jobs_container.save_to_file(format!("{}{}", filename, k_part).as_str());
     }
-    // save for other steps
 }
 
 use clap::Parser;
@@ -757,7 +693,6 @@ struct Args {
     #[clap(long, default_value = "unknown")]
     stat_task_name: String,
 }
-use std::io::Write;
 
 fn main() {
     Builder::from_default_env()
@@ -771,8 +706,8 @@ fn main() {
     let final_dir = format!("../{}", grapg_type);
     match args.action.as_str() {
         "from_csv" => {
-            // main_tasks();
-            // println!("Ok main tasks");
+            main_tasks();
+            println!("Ok main tasks");
             main_instances();
             println!("Ok main instances");
         }
@@ -797,16 +732,6 @@ fn main() {
                 String::from("../other/tasks"),
                 format!("./st/other_{}", args.stat_task_name).as_str(),
             );
-        }
-        "char_gr" => {
-            char_pure_dags(&source_dir, "tree_incr", "./cr/pures_incr");
-
-            char_task_dags(String::from("../tree_incr/tasks"), "tree_incr", "./cr/incr");
-            char_task_dags(String::from("../tree_decr/tasks"), "tree_decr", "./cr/decr");
-            char_task_dags(String::from("../other/tasks"), "other", "./cr/other");
-
-            char_pure_dags(&source_dir, "other", "./cr/pures_other");
-            char_pure_dags(&source_dir, "tree_decr", "./cr/pures_decr");
         }
         _ => {
             println!("from_csv -> form -> pure -> task -> ins \n tree_incr tree_decr other");

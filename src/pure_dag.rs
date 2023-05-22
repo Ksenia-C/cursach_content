@@ -1,6 +1,5 @@
 use petgraph::visit::EdgeRef;
 use petgraph::{graph::Graph, stable_graph::NodeIndex, Directed};
-// use std::collections::hash_map::IntoIter;
 
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
@@ -169,10 +168,6 @@ impl DoTraverse for PureDag {
         for v in self.neighbors(u) {
             go_further = true;
 
-            // this condition must be legacy as I use dfs
-            // if depth[v.index()] != 0 {
-            //     continue;
-            // }
             if self.dfs(v, depth, used, is_tree) != 0 {
                 return 1;
             }
@@ -197,9 +192,9 @@ impl DoTraverse for PureDag {
     ) {
         for v in self.neighbors(u) {
             visited_parents[v.index()] -= 1;
-            // assign node level at least as his parent one
+
             levels[v.index()] = levels[v.index()].max(levels[u.index()] + 1);
-            // when level is calculated fully go further to descendants
+
             if visited_parents[v.index()] == 0 {
                 self.dfs_to_calc_first_level(v, visited_parents, levels);
             }
@@ -293,7 +288,7 @@ impl AbsorbStat for PureDag {
 
     fn get_links_per_type(&self, levels: &Vec<u32>) -> (Vec<u32>, Vec<u32>) {
         let mut straight_links: Vec<u32> = vec![0; levels.len()];
-        let mut union_links: Vec<u32> = vec![0; levels.len()]; // REALLY CAN I use levels.len() instead of cp?
+        let mut union_links: Vec<u32> = vec![0; levels.len()];
 
         let mut top_sort: Vec<usize> = (0..levels.len()).collect();
         top_sort.sort_by(|a, b| levels[*a].cmp(&levels[*b]));

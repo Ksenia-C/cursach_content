@@ -77,13 +77,11 @@ pub fn char_pure_dags(tt_input_dir: &String, graph_type: &str, output_file: &str
     let mut rnd = rand::thread_rng();
 
     let mut str_bufer = String::new();
-    let mut to_end = 20;
     for path in paths {
         let path = path.unwrap().path().display().to_string();
         if !path.contains(graph_type) {
             continue;
         }
-        println!("{}", path);
 
         let mut pure_dags = PureDags::get_from_file(path.as_str());
         println!("Real work just starts");
@@ -98,11 +96,6 @@ pub fn char_pure_dags(tt_input_dir: &String, graph_type: &str, output_file: &str
                 &mut hash_maxs,
             );
         }
-        println!("{}", to_end);
-        if to_end == 0 {
-            break;
-        }
-        to_end -= 1;
     }
 
     for (hmin, hmax) in hash_mins.iter_mut().zip(hash_maxs.iter_mut()) {
@@ -130,7 +123,6 @@ pub fn char_pure_dags(tt_input_dir: &String, graph_type: &str, output_file: &str
 }
 
 pub fn char_task_dags(tt_input_dir: String, graph_type: &str, output_file: &str) {
-    // Examples of calc stat
     let paths = fs::read_dir(tt_input_dir).unwrap();
     let mut rnd = rand::thread_rng();
     let (mut hash_mins, mut hash_maxs) = init_chars();
@@ -190,5 +182,3 @@ pub fn char_task_dags(tt_input_dir: String, graph_type: &str, output_file: &str)
         Ok(_) => {}
     }
 }
-
-//

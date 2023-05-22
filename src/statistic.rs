@@ -261,14 +261,8 @@ impl LevelGenerator {
             stat_result: HashMap::new(),
         };
     }
-    pub fn add_statistic<F>(
-        &mut self,
-        cp: u32,
-        part: u32,
-        name: &str,
-        graph: &PureDag, // was gragh_iter: I: Iterator<Item = PureDag>
-        stat_gen: F,
-    ) where
+    pub fn add_statistic<F>(&mut self, cp: u32, part: u32, name: &str, graph: &PureDag, stat_gen: F)
+    where
         F: FnOnce(&PureDag) -> Vec<Vec<u32>>,
     {
         if !self.stat.contains_key(name) {
@@ -316,8 +310,7 @@ impl LevelGenerator {
     }
 }
 
-const BASIC_PERCENTILES: [f64; 5] = [0.0, 0.2, 0.3, 0.6, 1.0];
-// const BASIC_PERCENTILES: [f64; 5] = [0.0, 0.2, 0.4, 0.8, 1.0]; is better but previos is not totaly aweful
+const BASIC_PERCENTILES: [f64; 5] = [0.0, 0.2, 0.4, 0.8, 1.0];
 
 impl StatBase for LevelGenerator {
     fn form_stats(&mut self) {

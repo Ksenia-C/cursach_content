@@ -1,7 +1,6 @@
 use petgraph::{graph::Graph, stable_graph::NodeIndex, Directed};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, collections::HashSet, fs::File, io::Read, io::Write, path::Path};
-// use std::{error::Error, io, process};
 
 #[derive(Serialize, Deserialize)]
 struct Instance {
@@ -35,10 +34,9 @@ struct TaskInstInfo {
 
 type DAG = Graph<TaskInfo, u64, Directed>;
 
-const BATCH_TASK_FILE: &str = "/home/ksenia/datasets/batch_task.csv";
-const MAX_GRAPHS: i32 = 100000;
-const BATCH_INSTANCE_FILENAME: &str = "/home/ksenia/datasets/batch_instance.csv";
-pub const INS_INPUT_FILENAME: &str = "/home/ksenia/datasets/save_result_ins.json";
+const BATCH_TASK_FILE: &str = "../datasets/batch_task.csv";
+const BATCH_INSTANCE_FILENAME: &str = "../datasets/batch_instance.csv";
+pub const INS_INPUT_FILENAME: &str = "../datasets/save_result_ins.json";
 
 fn extend_dags(old_dag: &DAG) -> InstDag {
     let mut result = InstDag::new();
@@ -52,7 +50,6 @@ fn extend_dags(old_dag: &DAG) -> InstDag {
             instances: Vec::new(),
         });
     }
-    // result.extend_with_edges(old_dag.raw_edges().iter());
     for edge in old_dag.raw_edges() {
         result.add_edge(edge.source(), edge.target(), edge.weight);
     }
@@ -67,8 +64,7 @@ pub fn main_tasks() {
     let mut rdr = csv::Reader::from_path(BATCH_TASK_FILE).unwrap();
 
     let mut unterminated_jobs: HashSet<String> = HashSet::new();
-    // let mut max_cnt = MAX_GRAPHS;
-    let mut max_cnt: i32 = -1; // for release
+
     for result in rdr.records() {
         let record = result.expect("a CSV record");
         let dependences: Vec<&str> = record.get(0).unwrap().split('_').collect();
@@ -166,14 +162,6 @@ pub fn main_tasks() {
 
             graph.add_edge(job_indexs[&dependance_name], task_index, 1);
         }
-        if max_cnt > 0 {
-            // for debug
-            max_cnt -= 1;
-            if max_cnt == 0 {
-                break;
-            }
-            println!("till end {}", max_cnt);
-        }
     }
 
     println!("unterminated: {}", unterminated_jobs.len());
@@ -243,7 +231,7 @@ pub fn main_instances() {
     let jobs = get_graphs("../save_result.json");
     let mut task_to_index = get_task_indexes();
 
-    // they broke my code because of wrong task_name format
+    // skip them because of wrong task_name format
     let pass_jobs = vec![
         "j_4015961",
         "j_1127318",
@@ -261,11 +249,8 @@ pub fn main_instances() {
     ];
     let mut rdr = csv::Reader::from_path(BATCH_INSTANCE_FILENAME).unwrap();
 
-    println!("real work start");
+    println!("real work starts");
     let mut unterminated_jobs: HashSet<String> = HashSet::new();
-
-    // let mut max_cnt = MAX_GRAPHS;
-    let mut max_cnt: i32 = -1; // for release
 
     let mut lines = 0;
     let mut just_pass = 0;
@@ -277,12 +262,6 @@ pub fn main_instances() {
         if lines % 1000000 == 0 {
             println!("overal lines {}", lines);
         }
-        // if lines % 200 == 0 {
-        //     println!("overal lines {}", lines);
-        // }
-        // if lines > 80000000 {
-        //     break;
-        // }
 
         let job_name = record.get(2).unwrap();
 
@@ -376,12 +355,6 @@ pub fn main_instances() {
             }
         };
 
-        // Logic Todo check if use that
-        // let cpu_cnt = (avg_cpu_sage + 99.0) / 100.0;
-        // ins_duraction *= (cpu_cnt * 0.8).round() as u64;
-
-        // ins_duraction = (ins_duraction as f64 * avg_cpu_sage).round() as u64;
-
         match graph.node_weight_mut(*task_ind) {
             None => {
                 panic!(
@@ -397,16 +370,6 @@ pub fn main_instances() {
                 mem_avg: avg_mem_sage,
                 mem_diff_max: max_mem_sage - avg_mem_sage,
             }),
-        }
-        if max_cnt > 0 {
-            max_cnt -= 1;
-            if max_cnt % 1000000 == 0 {
-                println!("from start {}", MAX_GRAPHS - max_cnt);
-            }
-            if max_cnt == 0 {
-                // debug
-                break;
-            }
         }
     }
     println!("unterminated: {}", unterminated_jobs.len());

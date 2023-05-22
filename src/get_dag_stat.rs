@@ -44,14 +44,9 @@ pub fn stat_pure_dags(tt_input_dir: String, output_file: &str) {
     };
 
     let mut str_bufer = String::new();
-    // let mut to_end = 13;
     let mut graphs_count: u64 = 0;
     for path in paths {
         let path = path.unwrap().path().display().to_string();
-        // if !path.contains(graph_type) {
-        //     continue;
-        // }
-        println!("{}", path);
 
         let mut pure_dags = PureDags::get_from_file(path.as_str());
         println!("Real work just starts");
@@ -61,11 +56,6 @@ pub fn stat_pure_dags(tt_input_dir: String, output_file: &str) {
             current_measure(output_file, &graph, &mut str_bufer);
             graphs_count += 1;
         }
-        // println!("{}", to_end);
-        // if to_end == 0 {
-        //     break;
-        // }
-        // to_end -= 1;
     }
     match file.write_all(str_bufer.as_bytes()) {
         Err(why) => panic!("cant save serialization {}", why),
@@ -75,7 +65,6 @@ pub fn stat_pure_dags(tt_input_dir: String, output_file: &str) {
 }
 
 pub fn stat_task_dags(tt_input_dir: String, output_file: &str) {
-    // Examples of calc stat
     let paths = fs::read_dir(tt_input_dir).unwrap();
 
     let path = Path::new(output_file);
@@ -92,7 +81,6 @@ pub fn stat_task_dags(tt_input_dir: String, output_file: &str) {
         if path.ends_with("dot") {
             continue;
         }
-        // println!("{}", path);
 
         let mut task_dag = TaskDag::new();
         task_dag.load_from_file(path.as_str());
